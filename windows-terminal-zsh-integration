@@ -1,0 +1,69 @@
+#!/usr/bin/env zsh
+#
+# Docs:
+#
+#   https://learn.microsoft.com/en-us/windows/terminal/tutorials/new-tab-same-directory#zsh
+#
+# The code recommended by the docs looks like this:
+#
+#   keep_current_path() {
+#     printf "\e]9;9;%s\e\\" "$(wslpath -w "$PWD")"
+#   }
+#   precmd_functions+=(keep_current_path)
+#
+# We do the same thing but with fewer bugs and better performance.
+#
+# Implementation notes:
+#
+# - We don't need to defend against aliases here because they are disabled.
+# - We do need to defend against user-defined functions that override builtins.
+# - The shebang at the top is to enable syntax highlighting in various editors
+#   and code viewers. The file isn't executable and isn't supposed to be
+#   executed.
+
+builtin emulate -L zsh
+
+[[ -z $SSH_CONNECTON && $+commands[wslpath] = 1 ]] || builtin return 0
+
+_windows-terminal-zsh-integration-chpwd-hook() {
+  builtin emulate -L zsh -o no_multi_byte
+
+  (( $+commands[wslpath] )) || builtin return
+
+  if [[ $PWD = /* && $PWD -ef . ]]; then
+    builtin local cwd=$PWD
+  else
+    builtin local cwd=${${:-.}:a}
+  fi
+  [[ -n $cwd ]] || builtin return
+
+  builtin typeset -gA _windows_terminal_lin2win_cwd
+  builtin local win_cwd=${_windows_terminal_lin2win_cwd[$cwd]-}
+
+  if [[ -z $win_cwd ]]; then
+    win_cwd="$(builtin command wslpath -am . 2>/dev/null)x" || builtin return
+    win_cwd=${win_cwd[1,-2]//$'\e'/$'\e\e'}
+    [[ -n $win_cwd ]] || builtin return
+    _windows_terminal_lin2win_cwd[$cwd]=$win_cwd
+  fi
+
+  builtin local seq=$'\e]9;9;'$win_cwd$'\e\\'
+  if [[ -n $TMUX ]]; then
+    seq+=$'\ePtmux;'${seq//$'\e'/$'\e\e'}$'\e\\'
+  fi
+
+  if [[ -t 1 ]]; then
+    builtin print -rn -- $seq
+  elif [[ -w $TTY ]]; then
+    builtin print -rn -- $seq >$TTY
+  fi
+}
+
+builtin typeset -ga chpwd_functions
+
+if (( ! $chpwd_functions[(Ie)_windows-terminal-zsh-integration-chpwd-hook] )); then
+  chpwd_functions+=(_windows-terminal-zsh-integration-chpwd-hook)
+  _windows-terminal-zsh-integration-chpwd-hook
+fi
+
+builtin unfunction windows-terminal-zsh-integration
