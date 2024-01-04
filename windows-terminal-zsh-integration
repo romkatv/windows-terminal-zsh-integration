@@ -23,7 +23,7 @@
 
 builtin emulate -L zsh
 
-[[ -z $SSH_CONNECTON && $+commands[wslpath] = 1 ]] || builtin return 0
+[[ -z $SSH_CONNECTION && $+commands[wslpath] = 1 ]] || builtin return 0
 
 _windows-terminal-zsh-integration-chpwd-hook() {
   builtin emulate -L zsh -o no_multi_byte
